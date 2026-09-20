@@ -1,0 +1,14 @@
+{
+  "title": "Nottinghamshire Gritting",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Nottinghamshire Gritting",
+        "description": "Creates entities from Nottinghamshire County Council Winter Service and Gritting email updates received by Home Assistant's IMAP integration. Before continuing, subscribe to the council's Winter Service and Gritting information bulletin and configure the IMAP integration to include message text."
+      }
+    },
+    "abort": {
+      "already_configured": "Nottinghamshire Gritting is already configured."
+    }
+  }
+}

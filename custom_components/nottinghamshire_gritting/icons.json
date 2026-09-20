@@ -1,0 +1,13 @@
+{
+  "entity": {
+    "binary_sensor": {
+      "gritting_overnight": {
+        "default": "mdi:snowflake",
+        "state": {
+          "on": "mdi:snowflake-alert",
+          "off": "mdi:snowflake-off"
+        }
+      }
+    }
+  }
+}

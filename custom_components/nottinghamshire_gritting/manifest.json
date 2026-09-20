@@ -1,0 +1,14 @@
+{
+  "domain": "nottinghamshire_gritting",
+  "name": "Nottinghamshire Gritting",
+  "after_dependencies": [
+    "imap"
+  ],
+  "codeowners": [],
+  "config_flow": true,
+  "documentation": "https://www.nottinghamshire.gov.uk/transport/gritting/about",
+  "integration_type": "service",
+  "iot_class": "cloud_push",
+  "requirements": [],
+  "version": "0.1.2"
+}
