@@ -8,13 +8,12 @@ import logging
 from typing import Any
 
 from homeassistant.core import Event, HomeAssistant
-from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
 from .const import SIGNAL_UPDATE, STORAGE_KEY, STORAGE_VERSION
-from .parser import is_candidate_message, is_relevant_message, parse_message
+from .parser import is_relevant_message, parse_message
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -63,32 +62,9 @@ class GrittingManager:
 
         subject = str(payload.get("subject") or "")
         sender = str(payload.get("sender") or "")
-        event_text = str(payload.get("text") or "")
-        custom_value = payload.get("custom")
-        custom_text = "" if custom_value is None else str(custom_value)
-        body = "\n".join(part for part in (event_text, custom_text) if part)
-
-        # IMAP event text is normally clipped (2048 bytes by default). If the
-        # event looks even plausibly like a Nottinghamshire winter-service
-        # message, fetch the triggering email in full using IMAP's supported
-        # fetch action before deciding whether it is relevant.
-        if is_candidate_message(subject, body, sender):
-            fetched = await self._async_fetch_message(payload)
-            if fetched is not None:
-                subject = str(fetched.get("subject") or subject)
-                sender = str(fetched.get("sender") or sender)
-                fetched_text = str(fetched.get("text") or "")
-                body = "\n".join(part for part in (body, fetched_text) if part)
+        body = str(payload.get("text") or payload.get("custom") or "")
 
         if not is_relevant_message(subject, body, sender):
-            _LOGGER.debug(
-                "Ignoring IMAP message that did not match Nottinghamshire gritting: "
-                "subject=%r sender=%r event_text_length=%d custom_present=%s",
-                subject,
-                sender,
-                len(event_text),
-                custom_value is not None,
-            )
             return
 
         decision_dt = self._event_datetime(payload.get("date"))
@@ -120,39 +96,6 @@ class GrittingManager:
             )
 
         async_dispatcher_send(self.hass, SIGNAL_UPDATE)
-
-    async def _async_fetch_message(
-        self, payload: dict[str, Any]
-    ) -> dict[str, Any] | None:
-        """Fetch the complete triggering email through Home Assistant IMAP."""
-        entry_id = payload.get("entry_id")
-        uid = payload.get("uid")
-        if not entry_id or uid is None:
-            return None
-
-        try:
-            response = await self.hass.services.async_call(
-                "imap",
-                "fetch",
-                {"entry": str(entry_id), "uid": str(uid)},
-                blocking=True,
-                return_response=True,
-            )
-        except HomeAssistantError as err:
-            _LOGGER.debug(
-                "Unable to fetch full IMAP message %s for gritting parser: %s",
-                uid,
-                err,
-            )
-            return None
-
-        if not isinstance(response, dict):
-            _LOGGER.debug(
-                "IMAP fetch for message %s returned an unexpected response", uid
-            )
-            return None
-
-        return response
 
     async def async_clock_tick(self, _now: datetime) -> None:
         """Refresh entity availability/status as a stored decision expires."""
