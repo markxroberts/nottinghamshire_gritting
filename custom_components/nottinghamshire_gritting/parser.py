@@ -45,26 +45,18 @@ RELEVANCE_MARKERS = (
     "grit",
     "gritter",
     "winter service",
-    "winter weather",
     "road temperature",
     "road surface temperature",
     "precautionary treatment",
     "scheduled run",
-    "salting",
 )
 
 OFFICIAL_MARKERS = (
     "nottinghamshire county council",
     "nottinghamshire.gov.uk",
     "nottscc",
-    "uknottscc",
     "via east midlands",
     "viaem.co.uk",
-)
-
-GOVDELIVERY_MARKERS = (
-    "govdelivery",
-    "granicus",
 )
 
 TEMP_PATTERNS = (
@@ -110,74 +102,17 @@ def normalise_text(value: str | None) -> str:
     return text.strip()
 
 
-def _normalised_parts(
-    subject: str | None, body: str | None, sender: str | None
-) -> tuple[str, str, str]:
-    """Return lower-case normalised subject, body and sender."""
-    return (
-        normalise_text(subject).lower(),
-        normalise_text(body).lower(),
-        normalise_text(sender).lower(),
-    )
-
-
-def is_candidate_message(
-    subject: str | None, body: str | None, sender: str | None
-) -> bool:
-    """Return True if an event is worth fetching in full from IMAP.
-
-    IMAP event bodies are clipped by default. Nottinghamshire's GovDelivery
-    branding or the actual treatment decision can therefore sit beyond the
-    event excerpt. This deliberately casts a slightly wider net than
-    is_relevant_message, but is only used to decide whether to fetch the
-    single triggering message in full.
-    """
-    subject_text, body_text, sender_text = _normalised_parts(subject, body, sender)
-    combined = " ".join((subject_text, body_text, sender_text))
-
-    if any(marker in combined for marker in OFFICIAL_MARKERS):
-        return True
-
-    if any(marker in combined for marker in RELEVANCE_MARKERS):
-        return True
-
-    return any(marker in sender_text for marker in GOVDELIVERY_MARKERS) and any(
-        marker in subject_text
-        for marker in ("winter", "road", "weather", "highway", "grit", "salt")
-    )
-
-
-def is_relevant_message(
-    subject: str | None, body: str | None, sender: str | None
-) -> bool:
+def is_relevant_message(subject: str | None, body: str | None, sender: str | None) -> bool:
     """Return True when a message looks like an official Notts gritting update."""
-    subject_text, body_text, sender_text = _normalised_parts(subject, body, sender)
-    combined = " ".join((subject_text, body_text, sender_text))
+    combined = " ".join((normalise_text(subject), normalise_text(body), normalise_text(sender))).lower()
     has_winter_marker = any(marker in combined for marker in RELEVANCE_MARKERS)
     has_official_marker = any(marker in combined for marker in OFFICIAL_MARKERS)
+
+    # GovDelivery messages can vary in their sender display name. If the body
+    # clearly identifies Nottinghamshire and contains operational winter terms,
+    # it is still safe to accept.
     has_notts_marker = "nottinghamshire" in combined
-
-    # GovDelivery/Granicus occasionally changes the display sender and the
-    # first event-body chunk may not contain the council footer. A clearly
-    # winter/gritting subject from that platform is still acceptable once the
-    # full triggering message has been fetched.
-    govdelivery_subject = any(
-        marker in sender_text for marker in GOVDELIVERY_MARKERS
-    ) and any(
-        marker in subject_text
-        for marker in (
-            "grit",
-            "gritter",
-            "winter service",
-            "winter weather",
-            "road treatment",
-            "salting",
-        )
-    )
-
-    return has_winter_marker and (
-        has_official_marker or has_notts_marker or govdelivery_subject
-    )
+    return has_winter_marker and (has_official_marker or has_notts_marker)
 
 
 def _first_decision_match(text: str) -> tuple[bool | None, re.Match[str] | None]:
