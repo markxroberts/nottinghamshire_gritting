@@ -273,7 +273,13 @@ class GrittingManager:
         today = now.date()
 
         if decision_date == today:
-            return True
+            # Before 09:00, a post/update from the early hours still belongs to
+            # the overnight period just ending. After 09:00, do not let a 02:00
+            # or 06:00 operational update remain displayed as tonight's plan.
+            if now.hour < 9:
+                return True
+            return decision.hour >= 9
+
         if decision_date == today - timedelta(days=1) and now.hour < 9:
             return True
         return False
