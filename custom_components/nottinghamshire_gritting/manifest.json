@@ -4,11 +4,14 @@
   "after_dependencies": [
     "imap"
   ],
-  "codeowners": [],
+  "codeowners": [
+    "@markxroberts"
+  ],
   "config_flow": true,
-  "documentation": "https://www.nottinghamshire.gov.uk/transport/gritting/about",
+  "documentation": "https://github.com/markxroberts/nottinghamshire_gritting#readme",
   "integration_type": "service",
   "iot_class": "cloud_polling",
   "requirements": [],
-  "version": "0.2.0"
+  "version": "0.2.1",
+  "issue_tracker": "https://github.com/markxroberts/nottinghamshire_gritting/issues"
 }

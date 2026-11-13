@@ -4,7 +4,7 @@ A Home Assistant custom integration that answers a practical question: **is grit
 
 ## Source priority
 
-Version 0.2.0 combines three sources, in strict priority order:
+The integration combines three sources, in strict priority order:
 
 1. **Nottinghamshire County Council @NottsCC on X — confirmed**
    - Preferred source.
@@ -65,9 +65,16 @@ Official information:
 
 ## Installation
 
-1. Copy `custom_components/nottinghamshire_gritting` into Home Assistant's `/config/custom_components/` directory, or update it through your normal custom-integration/HACS workflow.
-2. Restart Home Assistant.
-3. Add **Nottinghamshire Gritting** from **Settings → Devices & services** if it is not already configured.
+### HACS
+
+1. Open **HACS → ⋮ → Custom repositories** in Home Assistant.
+2. Enter `https://github.com/markxroberts/nottinghamshire_gritting`, select **Integration**, and choose **Add**.
+3. Open **Nottinghamshire Gritting** in HACS and select **Download**.
+4. Restart Home Assistant. For a first installation, open **Settings → Devices & services → Add integration** and select **Nottinghamshire Gritting**.
+
+### Manual installation
+
+Copy `custom_components/nottinghamshire_gritting` into `/config/custom_components/`, then follow step 4 above.
 
 ### Optional email fallbacks
 
@@ -114,6 +121,10 @@ logger:
 ```
 
 ## Version history
+
+### 0.2.1
+
+- Packaged the integration for HACS custom repository installation.
 
 ### 0.2.0
 
