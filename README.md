@@ -1,60 +1,111 @@
 # Nottinghamshire Gritting for Home Assistant
 
-A small Home Assistant custom integration which turns Nottinghamshire County Council's official **Winter Service and Gritting information** email updates into Home Assistant entities.
+A Home Assistant custom integration that answers a practical question: **is gritting expected on Nottinghamshire's roads overnight?**
+
+## Source priority
+
+Version 0.2.0 combines three sources, in strict priority order:
+
+1. **Nottinghamshire County Council @NottsCC on X — confirmed**
+   - Preferred source.
+   - The County's own gritting page tells residents to follow @NottsCC to find out when Nottinghamshire roads are being gritted.
+   - The integration polls the public X syndication timeline every 30 minutes and once immediately after startup.
+2. **Nottinghamshire County Council winter-service email — confirmed**
+   - Used when a current County email decision is available and there is no current X decision.
+3. **Nottingham City Council winter-service email — inferred proxy**
+   - Used only as a positive fallback when the City explicitly says it is gritting.
+   - A City "no grit" decision is deliberately ignored because road conditions elsewhere in Nottinghamshire can be colder.
+   - The status is shown as **Likely — Nottingham City proxy**, never as a confirmed County decision.
+
+A stronger source always wins over a weaker one.
+
+## X feed implementation
+
+X does not provide a free RSS feed for profiles. The integration therefore uses the public profile-syndication endpoint that X itself uses for embedded timelines:
+
+`https://syndication.twitter.com/srv/timeline-profile/screen-name/NottsCC`
+
+No X account, developer key or API token is required.
+
+This endpoint is not a documented API and can return HTTP 429 or change format. For that reason it is treated as **best effort**. If it is unavailable, the integration falls through to County email and then the Nottingham City positive proxy instead of making the sensor fail.
+
+The binary sensor and status sensor expose:
+- `source`
+- `source_key`
+- `confidence`
+- `source_url`
+- `x_feed_available`
+- `x_last_check`
+- `x_last_success`
+- `x_last_error`
 
 ## Entities
 
-- `binary_sensor.gritting_overnight` — **On** when the latest current council update says gritting/treatment is planned; **Off** when it explicitly says no treatment is planned; **Unavailable** while waiting for a new decision or if a message cannot be interpreted safely.
-- `sensor.gritting_status` — `Planned`, `Not planned`, `Awaiting decision`, or `Decision unclear`.
-- `sensor.minimum_road_temperature` — road-surface temperature quoted in the update, when present.
-- `sensor.treatment_time` — first treatment time parsed from the update, when present.
-- `sensor.last_decision` — timestamp of the last relevant council update (diagnostic).
+- `binary_sensor.gritting_overnight`
+  - **On** — confirmed County gritting, or positive Nottingham City proxy when no County decision is available.
+  - **Off** — only when a current County source explicitly says treatment is not planned.
+  - **Unavailable** — no current usable decision.
+- `sensor.gritting_status`
+  - `Planned`
+  - `Not planned`
+  - `Likely — Nottingham City proxy`
+  - `Awaiting decision`
+  - `Decision unclear`
+- `sensor.minimum_road_temperature`
+- `sensor.treatment_time`
+- `sensor.last_decision` — timestamp of the effective current decision.
 
-The binary sensor also carries attributes including the source subject, sender, decision time, treatment time, minimum road temperature and a short excerpt from the council message.
+## Why use the County X feed?
 
-## Why email rather than weather inference?
-
-Nottinghamshire says Via makes the daily winter-service decision using specialist road forecasting, ice-prediction software and roadside weather stations. The published decision is therefore a better source than trying to infer gritting from an ordinary local air-temperature sensor.
+Nottinghamshire County Council says Via East Midlands makes the daily gritting decision using specialist road-surface forecasts, ice-prediction software and roadside weather stations. The County's gritting information specifically directs residents to follow **@NottsCC** for gritting updates.
 
 Official information:
+- https://www.nottinghamshire.gov.uk/transport/gritting/about
 - https://www.nottinghamshire.gov.uk/transport/gritting/map
-- https://www.nottinghamshire.gov.uk/council-and-democracy/news-and-media/emailme/newsletter-topics
 
 ## Installation
 
-1. Copy the included `custom_components/nottinghamshire_gritting` folder into your Home Assistant `/config/custom_components/` directory.
+1. Copy `custom_components/nottinghamshire_gritting` into Home Assistant's `/config/custom_components/` directory, or update it through your normal custom-integration/HACS workflow.
 2. Restart Home Assistant.
-3. Subscribe the mailbox you intend to monitor to Nottinghamshire County Council's **Winter Service and Gritting information** e-bulletin:
-   https://www.nottinghamshire.gov.uk/council-and-democracy/news-and-media/emailme/newsletter-topics
-4. Add/configure Home Assistant's **IMAP** integration for that mailbox.
-5. In the IMAP integration options, enable **message text** so `imap_content` events include the email body. Home Assistant only includes `text` when this option is selected.
-6. Preferably use an IMAP folder or search that contains only the Nottinghamshire winter-service messages. This reduces event traffic and eliminates the chance of unrelated email matching.
-7. Go to **Settings → Devices & services → Add integration**, search for **Nottinghamshire Gritting**, and add it.
+3. Add **Nottinghamshire Gritting** from **Settings → Devices & services** if it is not already configured.
 
-Home Assistant IMAP documentation:
-https://www.home-assistant.io/integrations/imap/
+### Optional email fallbacks
+
+For County and Nottingham City email fallback support:
+
+1. Configure Home Assistant's **IMAP** integration for the mailbox receiving the winter-service bulletins.
+2. In the IMAP options, enable **message text**, so `imap_content` events contain the email body.
+3. Subscribe to the relevant official winter-service bulletins.
+
+The integration works without IMAP if the @NottsCC X source is available.
 
 ## Decision expiry
 
-A decision received today is treated as current until **09:00 the following morning**. A decision received yesterday therefore still describes the overnight period after midnight, but it is deliberately expired at 09:00 rather than being incorrectly shown as tonight's decision all day.
+A decision received today remains current until **09:00 the following morning**. A decision from yesterday therefore remains valid after midnight, but is expired at 09:00 rather than being incorrectly shown as tonight's decision during the following day.
 
-If a new relevant council message is received but its wording cannot be safely classified, the integration reports **Decision unclear** and makes the binary sensor unavailable rather than guessing.
+## Source behaviour
 
-## First winter update
+### County X or County email
 
-The parser deliberately recognises several common forms such as:
+An explicit positive or negative operational decision is authoritative.
 
+Examples the parser recognises include:
 - “Gritters will be out ...”
+- “Our gritters are heading out ...”
+- “We'll be gritting ...”
 - “Gritting/treatment is planned ...”
-- “Next scheduled run ...”
+- “Routes will be treated ...”
 - “No gritting/treatment is planned ...”
+- “We won't be gritting ...”
 - “No action required ...”
 
-The exact GovDelivery wording can change. If the first real 2026/27 Nottinghamshire message produces `Decision unclear`, copy its subject/body from Home Assistant's event listener or the email itself and the parser can be adjusted very easily.
+### Nottingham City email
+
+Only a **positive** City treatment decision is used as a proxy. It can make the binary sensor **On** with `confidence: inferred`, but it can never switch the County sensor **Off**.
 
 ## Logging
 
-To temporarily enable parser diagnostics:
+For temporary diagnostics:
 
 ```yaml
 logger:
@@ -62,14 +113,24 @@ logger:
     custom_components.nottinghamshire_gritting: debug
 ```
 
-## Version
+## Version history
 
-0.1.2 — fixes Home Assistant thread-safety warning when entities refresh on the hourly expiry check.
+### 0.2.0
 
-0.1.0 — initial release, targeted at Home Assistant 2026.9.x.
+- Added @NottsCC X timeline as the preferred confirmed source.
+- Added automatic 30-minute X polling and startup refresh.
+- Added Nottingham City winter-service email as a positive-only fallback proxy.
+- Added source priority, confidence and source URL attributes.
+- Added X availability/last-success/error diagnostics.
+- Preserved County email as the confirmed secondary source.
+- Migrates the existing v0.1.x stored County email decision automatically.
 
-
-## 0.1.2
+### 0.1.2
 
 - Added local Home Assistant brand icon/logo.
 - Added state-aware icon translations for the Gritting overnight binary sensor.
+- Fixed Home Assistant thread-safety warning when entities refresh on the hourly expiry check.
+
+### 0.1.0
+
+- Initial release.
