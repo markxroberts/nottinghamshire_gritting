@@ -1,6 +1,6 @@
-"""Parser for Nottinghamshire winter-service email messages.
+"""Parsers for Nottinghamshire and Nottingham City winter-service updates.
 
-Kept free of Home Assistant imports so the parser can be tested independently.
+Kept free of Home Assistant imports so the parsing logic can be tested independently.
 """
 
 from __future__ import annotations
@@ -9,6 +9,9 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from html import unescape
 import re
+
+SOURCE_COUNTY_EMAIL = "county_email"
+SOURCE_CITY_EMAIL = "city_email"
 
 
 @dataclass(slots=True)
@@ -22,41 +25,82 @@ class ParsedDecision:
 
 
 NEGATIVE_PATTERNS = (
-    re.compile(r"\bno\s+(?:precautionary\s+)?(?:gritting|treatment|salting)\s+(?:is\s+)?(?:planned|required|scheduled)\b", re.I),
-    re.compile(r"\bno\s+(?:gritting|treatment|salting)\s+(?:is\s+)?(?:needed|required)\b", re.I),
+    re.compile(
+        r"\bno\s+(?:precautionary\s+)?(?:gritting|treatment|salting)\s+"
+        r"(?:is\s+)?(?:planned|required|scheduled)\b",
+        re.I,
+    ),
+    re.compile(
+        r"\bno\s+(?:gritting|treatment|salting)\s+(?:is\s+)?(?:needed|required)\b",
+        re.I,
+    ),
     re.compile(r"\bno\s+(?:winter\s+)?action\s+(?:is\s+)?required\b", re.I),
     re.compile(r"\bgritters?\s+(?:will\s+)?not\s+be\s+out\b", re.I),
     re.compile(r"\bno\s+gritters?\s+(?:are\s+)?(?:required|planned)\b", re.I),
+    re.compile(r"\b(?:we\s+)?(?:will\s+not|won't)\s+be\s+(?:gritting|treating|salting)\b", re.I),
+    re.compile(r"\bno\s+plans?\s+to\s+(?:grit|treat|salt)\b", re.I),
 )
 
 POSITIVE_PATTERNS = (
     re.compile(r"\bgritters?\s+(?:will\s+be|will\s+go|are\s+going)\s+out\b", re.I),
     re.compile(r"\bgritters?\s+are(?:\s+\w+){0,4}\s+out\b", re.I),
+    re.compile(r"\bgritters?\s+(?:are\s+)?heading\s+out\b", re.I),
     re.compile(r"\bgritters?\s+out\s+(?:tonight|this\s+evening|overnight)\b", re.I),
     re.compile(r"\b(?:we(?:'re| are)?\s+)?planning\s+to\s+(?:grit|treat|salt)\b", re.I),
+    re.compile(r"\bwe(?:'ll| will)\s+be\s+(?:gritting|treating|salting)\b", re.I),
+    re.compile(r"\bwe(?:'re| are)\s+(?:gritting|treating|salting)\b", re.I),
     re.compile(r"\bgritters?\s+(?:will\s+)?(?:treat|grit|salt)\b", re.I),
-    re.compile(r"\b(?:gritting|treatment|salting)\s+(?:is\s+)?(?:planned|scheduled|required)\b", re.I),
-    re.compile(r"\b(?:precautionary\s+)?treatment\s+(?:will\s+)?(?:take\s+place|be\s+carried\s+out)\b", re.I),
+    re.compile(
+        r"\b(?:gritting|treatment|salting)\s+(?:is\s+)?(?:planned|scheduled|required)\b",
+        re.I,
+    ),
+    re.compile(
+        r"\b(?:precautionary\s+)?treatment\s+(?:will\s+)?"
+        r"(?:take\s+place|be\s+carried\s+out)\b",
+        re.I,
+    ),
     re.compile(r"\bnext\s+scheduled\s+run\b", re.I),
-    re.compile(r"\bmain\s+routes?\s+(?:will\s+be|are\s+being|to\s+be)\s+(?:gritted|treated|salted)\b", re.I),
+    re.compile(
+        r"\b(?:main\s+)?routes?\s+(?:will\s+be|are\s+being|to\s+be)\s+"
+        r"(?:gritted|treated|salted)\b",
+        re.I,
+    ),
+    re.compile(
+        r"\broads?\s+(?:will\s+be|are\s+being|to\s+be)\s+"
+        r"(?:gritted|treated|salted)\b",
+        re.I,
+    ),
 )
 
 RELEVANCE_MARKERS = (
     "grit",
     "gritter",
     "winter service",
+    "winter weather",
     "road temperature",
     "road surface temperature",
     "precautionary treatment",
     "scheduled run",
+    "salt",
+    "salting",
 )
 
-OFFICIAL_MARKERS = (
+COUNTY_MARKERS = (
     "nottinghamshire county council",
     "nottinghamshire.gov.uk",
     "nottscc",
     "via east midlands",
     "viaem.co.uk",
+)
+
+CITY_MARKERS = (
+    "nottingham city council",
+    "nottinghamcity.gov.uk",
+    "nottinghamcity",
+    "transport nottingham",
+    "nottmtravelwise",
+    "my nottingham",
+    "mynottingham",
 )
 
 TEMP_PATTERNS = (
@@ -89,7 +133,7 @@ TIME_PATTERNS = (
 
 
 def normalise_text(value: str | None) -> str:
-    """Convert HTML-ish/plain email content into compact readable text."""
+    """Convert HTML-ish/plain content into compact readable text."""
     if not value:
         return ""
     text = unescape(value)
@@ -102,17 +146,40 @@ def normalise_text(value: str | None) -> str:
     return text.strip()
 
 
-def is_relevant_message(subject: str | None, body: str | None, sender: str | None) -> bool:
-    """Return True when a message looks like an official Notts gritting update."""
-    combined = " ".join((normalise_text(subject), normalise_text(body), normalise_text(sender))).lower()
-    has_winter_marker = any(marker in combined for marker in RELEVANCE_MARKERS)
-    has_official_marker = any(marker in combined for marker in OFFICIAL_MARKERS)
+def _combined(subject: str | None, body: str | None, sender: str | None) -> str:
+    return " ".join(
+        (normalise_text(subject), normalise_text(body), normalise_text(sender))
+    ).lower()
 
-    # GovDelivery messages can vary in their sender display name. If the body
-    # clearly identifies Nottinghamshire and contains operational winter terms,
-    # it is still safe to accept.
-    has_notts_marker = "nottinghamshire" in combined
-    return has_winter_marker and (has_official_marker or has_notts_marker)
+
+def classify_email_source(
+    subject: str | None, body: str | None, sender: str | None
+) -> str | None:
+    """Classify a relevant official winter-service email by authority."""
+    combined = _combined(subject, body, sender)
+    if not any(marker in combined for marker in RELEVANCE_MARKERS):
+        return None
+
+    # Test City first so a City bulletin mentioning the wider county does not
+    # accidentally become a Nottinghamshire County decision.
+    if any(marker in combined for marker in CITY_MARKERS):
+        return SOURCE_CITY_EMAIL
+    if any(marker in combined for marker in COUNTY_MARKERS):
+        return SOURCE_COUNTY_EMAIL
+    return None
+
+
+def is_relevant_message(
+    subject: str | None, body: str | None, sender: str | None
+) -> bool:
+    """Backward-compatible relevance helper for County messages."""
+    return classify_email_source(subject, body, sender) == SOURCE_COUNTY_EMAIL
+
+
+def is_gritting_update_text(text: str | None) -> bool:
+    """Return whether authoritative social text is potentially about gritting."""
+    normalised = normalise_text(text).lower()
+    return any(marker in normalised for marker in RELEVANCE_MARKERS)
 
 
 def _first_decision_match(text: str) -> tuple[bool | None, re.Match[str] | None]:
@@ -153,10 +220,12 @@ def _extract_treatment_time(text: str, decision_time: datetime) -> datetime | No
         elif ampm == "am" and hour == 12:
             hour = 0
 
-        candidate = decision_time.replace(hour=hour, minute=minute, second=0, microsecond=0)
+        candidate = decision_time.replace(
+            hour=hour, minute=minute, second=0, microsecond=0
+        )
 
-        # A treatment clock time substantially earlier than the email time is
-        # normally a run after midnight, rather than a run already completed.
+        # A treatment clock time substantially earlier than the update time is
+        # normally a run after midnight, rather than one already completed.
         if candidate < decision_time - timedelta(hours=4):
             candidate += timedelta(days=1)
         return candidate
@@ -170,17 +239,20 @@ def _make_excerpt(text: str, match: re.Match[str] | None) -> str | None:
         return text[:350]
     start = max(0, match.start() - 120)
     end = min(len(text), match.end() + 220)
-    excerpt = text[start:end].strip()
-    return excerpt[:500]
+    return text[start:end].strip()[:500]
 
 
-def parse_message(subject: str | None, body: str | None, decision_time: datetime) -> ParsedDecision:
-    """Parse a relevant Nottinghamshire gritting email."""
+def parse_message(
+    subject: str | None, body: str | None, decision_time: datetime
+) -> ParsedDecision:
+    """Parse an official winter-service email or social post."""
     text = normalise_text("\n".join(filter(None, (subject, body))))
     planned, decision_match = _first_decision_match(text)
     return ParsedDecision(
         planned=planned,
         minimum_road_temperature=_extract_temperature(text),
-        treatment_time=_extract_treatment_time(text, decision_time) if planned else None,
+        treatment_time=(
+            _extract_treatment_time(text, decision_time) if planned else None
+        ),
         excerpt=_make_excerpt(text, decision_match),
     )
