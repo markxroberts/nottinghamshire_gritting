@@ -38,7 +38,7 @@ async def async_setup_entry(
 
 
 class GrittingStatusSensor(NottinghamshireGrittingEntity, SensorEntity):
-    """Human readable status."""
+    """Human-readable status."""
 
     _attr_name = "Gritting status"
     _attr_unique_id = "nottinghamshire_gritting_status"
@@ -50,10 +50,19 @@ class GrittingStatusSensor(NottinghamshireGrittingEntity, SensorEntity):
 
     @property
     def extra_state_attributes(self) -> dict[str, object]:
+        data = self.manager.data
         return {
-            "decision_time": self.manager.data.decision_time,
-            "recognised": self.manager.data.recognised,
-            "subject": self.manager.data.subject,
+            "decision_time": data.decision_time,
+            "recognised": data.recognised,
+            "subject": data.subject,
+            "source": self.manager.source_label,
+            "source_key": data.source,
+            "confidence": data.confidence,
+            "source_url": data.source_url,
+            "x_feed_available": self.manager.x_available,
+            "x_last_check": self.manager.x_last_check,
+            "x_last_success": self.manager.x_last_success,
+            "x_last_error": self.manager.x_last_error,
         }
 
 
@@ -72,7 +81,10 @@ class MinimumRoadTemperatureSensor(NottinghamshireGrittingEntity, SensorEntity):
 
     @property
     def available(self) -> bool:
-        return self.manager.is_current and self.manager.data.minimum_road_temperature is not None
+        return (
+            self.manager.is_current
+            and self.manager.data.minimum_road_temperature is not None
+        )
 
     @property
     def native_value(self) -> float | None:
@@ -92,7 +104,10 @@ class TreatmentTimeSensor(NottinghamshireGrittingEntity, SensorEntity):
 
     @property
     def available(self) -> bool:
-        return self.manager.is_current and self.manager.treatment_datetime is not None
+        return (
+            self.manager.is_current
+            and self.manager.treatment_datetime is not None
+        )
 
     @property
     def native_value(self) -> datetime | None:
@@ -100,12 +115,12 @@ class TreatmentTimeSensor(NottinghamshireGrittingEntity, SensorEntity):
 
 
 class LastDecisionSensor(NottinghamshireGrittingEntity, SensorEntity):
-    """Timestamp of the last relevant council message."""
+    """Timestamp of the last effective decision."""
 
     entity_description = SensorEntityDescription(
         key="last_decision",
         name="Last decision",
-        icon="mdi:email-check-outline",
+        icon="mdi:calendar-clock",
         device_class=SensorDeviceClass.TIMESTAMP,
         entity_category=EntityCategory.DIAGNOSTIC,
     )
