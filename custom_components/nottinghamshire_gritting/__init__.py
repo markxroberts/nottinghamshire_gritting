@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
+
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.event import async_track_time_change
+from homeassistant.helpers.event import (
+    async_track_time_change,
+    async_track_time_interval,
+)
 
-from .const import EVENT_IMAP_CONTENT
+from .const import EVENT_IMAP_CONTENT, X_POLL_MINUTES
 from .manager import GrittingManager
 
 PLATFORMS = ["binary_sensor", "sensor"]
@@ -34,8 +39,22 @@ async def async_setup_entry(
             second=0,
         )
     )
+    entry.async_on_unload(
+        async_track_time_interval(
+            hass,
+            manager.async_refresh_x,
+            timedelta(minutes=X_POLL_MINUTES),
+        )
+    )
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+
+    # Do not hold up Home Assistant startup if X is slow or rate-limited.
+    entry.async_create_background_task(
+        hass,
+        manager.async_refresh_x(),
+        "nottinghamshire_gritting_initial_x_refresh",
+    )
     return True
 
 
