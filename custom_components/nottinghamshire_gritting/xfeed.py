@@ -11,7 +11,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 from email.utils import parsedate_to_datetime
-from html import unescape
 import json
 import logging
 import re
@@ -87,7 +86,7 @@ def parse_timeline_html(payload: str) -> list[XPost]:
         raise XFeedError("X syndication response did not contain __NEXT_DATA__")
 
     try:
-        data = json.loads(unescape(match.group(1)))
+        data = json.loads(match.group(1))
         entries = data["props"]["pageProps"]["timeline"]["entries"]
     except (KeyError, TypeError, json.JSONDecodeError) as err:
         raise XFeedError("X syndication timeline format was not recognised") from err
