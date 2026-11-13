@@ -16,13 +16,15 @@ async def async_setup_entry(
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up the gritting binary sensor."""
-    async_add_entities([NottinghamshireGrittingOvernightBinarySensor(entry.runtime_data)])
+    async_add_entities(
+        [NottinghamshireGrittingOvernightBinarySensor(entry.runtime_data)]
+    )
 
 
 class NottinghamshireGrittingOvernightBinarySensor(
     NottinghamshireGrittingEntity, BinarySensorEntity
 ):
-    """Whether Nottinghamshire has announced gritting for the current night."""
+    """Whether gritting is confirmed or strongly inferred for the current night."""
 
     _attr_name = "Gritting overnight"
     _attr_unique_id = "nottinghamshire_gritting_overnight"
@@ -49,5 +51,12 @@ class NottinghamshireGrittingOvernightBinarySensor(
             "subject": data.subject,
             "sender": data.sender,
             "message_excerpt": data.excerpt,
-            "source": "Nottinghamshire County Council winter service email",
+            "source": self.manager.source_label,
+            "source_key": data.source,
+            "confidence": data.confidence,
+            "source_url": data.source_url,
+            "x_feed_available": self.manager.x_available,
+            "x_last_check": self.manager.x_last_check,
+            "x_last_success": self.manager.x_last_success,
+            "x_last_error": self.manager.x_last_error,
         }
