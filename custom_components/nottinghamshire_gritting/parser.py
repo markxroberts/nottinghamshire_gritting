@@ -43,6 +43,12 @@ NEGATIVE_PATTERNS = (
 
 POSITIVE_PATTERNS = (
     re.compile(r"\bgritters?\s+(?:will\s+be|will\s+go|are\s+going)\s+out\b", re.I),
+    re.compile(r"\bgritting\s+teams?\s+(?:will\s+be|are)\s+(?:\w+\s+){0,3}out\b", re.I),
+    re.compile(
+        r"\bgritting\s+teams?\s+(?:are\s+)?(?:set|scheduled|due)\s+to\s+"
+        r"(?:go\s+out|head\s+out|take\s+to\s+the\s+roads|begin\s+salting)\b",
+        re.I,
+    ),
     re.compile(r"\bgritters?\s+are(?:\s+\w+){0,4}\s+out\b", re.I),
     re.compile(r"\bgritters?\s+(?:are\s+)?heading\s+out\b", re.I),
     re.compile(r"\bgritters?\s+out\s+(?:tonight|this\s+evening|overnight)\b", re.I),
