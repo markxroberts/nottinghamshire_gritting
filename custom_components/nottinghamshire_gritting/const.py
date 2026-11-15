@@ -20,7 +20,7 @@ SOURCE_PRIORITY = (
 )
 
 SOURCE_LABELS = {
-    SOURCE_COUNTY_X: "Nottinghamshire County Council @NottsCC on X",
+    SOURCE_COUNTY_X: "Nottinghamshire County Council @NottsCC on X (via FxTwitter)",
     SOURCE_COUNTY_EMAIL: "Nottinghamshire County Council winter-service email",
     SOURCE_CITY_EMAIL: "Nottingham City Council winter-service email (proxy)",
 }
@@ -32,6 +32,6 @@ COUNCIL_EMAILME_URL = (
 )
 X_PROFILE_URL = "https://x.com/NottsCC"
 X_TIMELINE_URL = (
-    "https://syndication.twitter.com/srv/timeline-profile/screen-name/NottsCC"
+    "https://api.fxtwitter.com/2/profile/NottsCC/statuses?count=20"
 )
 X_POLL_MINUTES = 30
