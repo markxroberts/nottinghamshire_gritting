@@ -12,6 +12,6 @@
   "integration_type": "service",
   "iot_class": "cloud_polling",
   "requirements": [],
-  "version": "0.2.1",
+  "version": "0.2.2",
   "issue_tracker": "https://github.com/markxroberts/nottinghamshire_gritting/issues"
 }
