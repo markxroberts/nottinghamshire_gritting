@@ -1,9 +1,10 @@
-"""Best-effort reader for the public @NottsCC X timeline.
+"""Best-effort reader for recent public @NottsCC posts.
 
-X does not provide a free RSS feed. This uses the same public syndication
-timeline endpoint used by X's embedded timeline widget. It requires no API key,
-but it is intentionally treated as best-effort because the endpoint is
-undocumented and may rate-limit or change.
+The official X embedded-timeline syndication endpoint is heavily rate-limited
+and returned HTTP 429 from Home Assistant. This reader instead uses FxTwitter's
+documented public API to retrieve the @NottsCC timeline. FxTwitter is a
+third-party bridge to public X data, so failure always falls through to the
+email sources rather than making the integration unavailable.
 """
 
 from __future__ import annotations
@@ -13,7 +14,6 @@ from datetime import datetime
 from email.utils import parsedate_to_datetime
 import json
 import logging
-import re
 from typing import Any
 
 from aiohttp import ClientError, ClientTimeout
@@ -24,17 +24,6 @@ from homeassistant.util import dt as dt_util
 from .const import X_TIMELINE_URL
 
 _LOGGER = logging.getLogger(__name__)
-
-_NEXT_DATA_RE = re.compile(
-    r'<script id="__NEXT_DATA__" type="application/json">(.*?)</script>',
-    re.S,
-)
-
-_USER_AGENT = (
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-    "AppleWebKit/537.36 (KHTML, like Gecko) "
-    "Chrome/120.0.0.0 Safari/537.36"
-)
 
 
 @dataclass(slots=True)
@@ -48,79 +37,82 @@ class XPost:
 
 
 class XFeedError(Exception):
-    """Base error for the best-effort X feed."""
+    """Error reading the best-effort X bridge."""
 
 
 class XFeedRateLimited(XFeedError):
-    """The X syndication endpoint rate-limited the request."""
+    """The X bridge rate-limited the request."""
 
 
 async def async_fetch_nottscc_posts(hass: HomeAssistant) -> list[XPost]:
-    """Fetch recent public posts from @NottsCC."""
+    """Fetch recent public posts from @NottsCC via FxTwitter."""
     session = async_get_clientsession(hass)
     try:
         async with session.get(
             X_TIMELINE_URL,
-            headers={"User-Agent": _USER_AGENT},
             timeout=ClientTimeout(total=12),
         ) as response:
+            if response.status == 204:
+                return []
             if response.status == 429:
-                raise XFeedRateLimited("X syndication returned HTTP 429")
+                raise XFeedRateLimited("FxTwitter returned HTTP 429")
             if response.status != 200:
                 raise XFeedError(
-                    f"X syndication returned HTTP {response.status}"
+                    f"FxTwitter returned HTTP {response.status}"
                 )
-            payload = await response.text()
+            try:
+                payload = await response.json(content_type=None)
+            except (json.JSONDecodeError, TypeError, ValueError) as err:
+                raise XFeedError(
+                    "FxTwitter returned invalid JSON"
+                ) from err
     except XFeedError:
         raise
     except (ClientError, TimeoutError) as err:
         raise XFeedError(str(err)) from err
 
-    return parse_timeline_html(payload)
+    return parse_timeline_json(payload)
 
 
-def parse_timeline_html(payload: str) -> list[XPost]:
-    """Parse X's embedded timeline HTML into recent @NottsCC posts."""
-    match = _NEXT_DATA_RE.search(payload)
-    if not match:
-        raise XFeedError("X syndication response did not contain __NEXT_DATA__")
+def parse_timeline_json(payload: Any) -> list[XPost]:
+    """Parse the FxTwitter v2 profile-statuses response."""
+    if not isinstance(payload, dict):
+        raise XFeedError("FxTwitter response was not an object")
 
-    try:
-        data = json.loads(match.group(1))
-        entries = data["props"]["pageProps"]["timeline"]["entries"]
-    except (KeyError, TypeError, json.JSONDecodeError) as err:
-        raise XFeedError("X syndication timeline format was not recognised") from err
+    code = payload.get("code")
+    if code not in (None, 200):
+        raise XFeedError(f"FxTwitter API returned code {code}")
+
+    results = payload.get("results")
+    if not isinstance(results, list):
+        raise XFeedError("FxTwitter response did not contain a results list")
 
     posts: list[XPost] = []
-    for entry in entries:
-        if not isinstance(entry, dict):
+    for item in results:
+        if not isinstance(item, dict):
             continue
-        try:
-            tweet = entry["content"]["tweet"]
-        except (KeyError, TypeError):
-            continue
-        if not isinstance(tweet, dict):
+        if item.get("type") not in (None, "status"):
             continue
 
-        user = tweet.get("user")
-        if not isinstance(user, dict):
+        author = item.get("author")
+        if not isinstance(author, dict):
             continue
-        if str(user.get("screen_name") or "").lower() != "nottscc":
-            # Avoid treating a retweet of another account as a County decision.
+        if str(author.get("screen_name") or "").lower() != "nottscc":
+            # Avoid treating reposted content from another account as an
+            # authoritative County gritting decision.
             continue
 
-        post_id = str(tweet.get("id_str") or tweet.get("id") or "")
-        text = str(tweet.get("full_text") or tweet.get("text") or "").strip()
-        created = _parse_created_at(tweet.get("created_at"))
+        post_id = str(item.get("id") or "").strip()
+        text = str(item.get("text") or "").strip()
+        created = _parse_created_at(
+            item.get("created_at"),
+            item.get("created_timestamp"),
+        )
         if not post_id or not text or created is None:
             continue
 
-        permalink = str(tweet.get("permalink") or "").strip()
-        if permalink.startswith("http://") or permalink.startswith("https://"):
-            url = permalink
-        elif permalink:
-            url = f"https://x.com{permalink if permalink.startswith('/') else '/' + permalink}"
-        else:
+        url = str(item.get("url") or "").strip()
+        if not url.startswith(("http://", "https://")):
             url = f"https://x.com/NottsCC/status/{post_id}"
 
         posts.append(
@@ -136,16 +128,28 @@ def parse_timeline_html(payload: str) -> list[XPost]:
     return posts
 
 
-def _parse_created_at(value: Any) -> datetime | None:
-    """Parse the timestamp used in the syndication timeline."""
+def _parse_created_at(
+    value: Any, timestamp: Any = None
+) -> datetime | None:
+    """Parse FxTwitter's status timestamp."""
+    if timestamp is not None:
+        try:
+            parsed = datetime.fromtimestamp(float(timestamp), tz=dt_util.UTC)
+        except (TypeError, ValueError, OSError, OverflowError):
+            parsed = None
+        if parsed is not None:
+            return dt_util.as_local(parsed)
+
     if not value:
         return None
-    try:
-        parsed = parsedate_to_datetime(str(value))
-    except (TypeError, ValueError):
-        parsed = dt_util.parse_datetime(str(value))
+
+    parsed = dt_util.parse_datetime(str(value))
     if parsed is None:
-        return None
+        try:
+            parsed = parsedate_to_datetime(str(value))
+        except (TypeError, ValueError):
+            return None
+
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=dt_util.UTC)
     return dt_util.as_local(parsed)
