@@ -9,7 +9,7 @@ The integration combines three sources, in strict priority order:
 1. **Nottinghamshire County Council @NottsCC on X — confirmed**
    - Preferred source.
    - The County's own gritting page tells residents to follow @NottsCC to find out when Nottinghamshire roads are being gritted.
-   - The integration polls the public X syndication timeline every 30 minutes and once immediately after startup.
+   - The integration polls @NottsCC every 30 minutes and once immediately after startup through the public FxTwitter/FxEmbed API.
 2. **Nottinghamshire County Council winter-service email — confirmed**
    - Used when a current County email decision is available and there is no current X decision.
 3. **Nottingham City Council winter-service email — inferred proxy**
@@ -21,13 +21,15 @@ A stronger source always wins over a weaker one.
 
 ## X feed implementation
 
-X does not provide a free RSS feed for profiles. The integration therefore uses the public profile-syndication endpoint that X itself uses for embedded timelines:
+X does not provide a practical keyless profile API for this use. Version 0.2.0/0.2.1 used X's embedded-timeline syndication endpoint, but that endpoint repeatedly returned **HTTP 429** from Home Assistant and even in a normal browser.
 
-`https://syndication.twitter.com/srv/timeline-profile/screen-name/NottsCC`
+From **0.2.2**, the integration instead uses the documented public FxTwitter/FxEmbed v2 profile-timeline API:
 
-No X account, developer key or API token is required.
+`https://api.fxtwitter.com/2/profile/NottsCC/statuses?count=20`
 
-This endpoint is not a documented API and can return HTTP 429 or change format. For that reason it is treated as **best effort**. If it is unavailable, the integration falls through to County email and then the Nottingham City positive proxy instead of making the sensor fail.
+FxTwitter is a **third-party bridge to public X data**; it is not operated by Nottinghamshire County Council or X. It requires no account, developer key or API token. Its published v2 rate limit is 1000 requests/minute per IP, while this integration makes only one request every 30 minutes.
+
+The underlying post remains an official @NottsCC post and its original X URL is exposed as `source_url`. The bridge itself is deliberately treated as **best effort**: if it times out, rate-limits or changes format, the integration falls through to County email and then the Nottingham City positive proxy rather than making the sensor fail.
 
 The binary sensor and status sensor expose:
 - `source`
@@ -121,6 +123,13 @@ logger:
 ```
 
 ## Version history
+
+### 0.2.2
+
+- Replaced X's rate-limited embedded-timeline syndication endpoint with the documented public FxTwitter/FxEmbed v2 profile timeline.
+- Kept @NottsCC as the preferred decision source while making the third-party transport explicit in the source label.
+- Retains County email and Nottingham City positive-proxy fallbacks if the X bridge is unavailable.
+- Bumped the manifest so HACS/Home Assistant can distinguish this build from 0.2.1.
 
 ### 0.2.1
 
