@@ -6,18 +6,18 @@ A Home Assistant custom integration that answers a practical question: **is grit
 
 The integration combines three sources, in strict priority order:
 
-1. **Nottinghamshire County Council @NottsCC on X — confirmed**
-   - Preferred source.
-   - The County's own gritting page tells residents to follow @NottsCC to find out when Nottinghamshire roads are being gritted.
-   - The integration polls @NottsCC every 30 minutes and once immediately after startup through the public FxTwitter/FxEmbed API.
-2. **Nottinghamshire County Council winter-service email — confirmed**
-   - Used when a current County email decision is available and there is no current X decision.
-3. **Nottingham City Council winter-service email — inferred proxy**
-   - Used only as a positive fallback when the City explicitly says it is gritting.
-   - A City "no grit" decision is deliberately ignored because road conditions elsewhere in Nottinghamshire can be colder.
-   - The status is shown as **Likely — Nottingham City proxy**, never as a confirmed County decision.
+1. **Nottinghamshire County Council winter-service email — confirmed**
+   - Highest priority when a current County decision is available.
+2. **Nottingham City Council Daily Gritting Update — inferred proxy**
+   - The most useful day-to-day fallback because it publishes a specific **Today's Gritting Action** such as **Gritting Required**, **No Gritting Required**, **Gritting Tonight** or **No Gritting Tonight**.
+   - Either outcome can drive the binary sensor, but the source remains explicitly marked as an inferred City proxy for the wider county.
+   - The GREEN / AMBER / RED colour is not used as the gritting decision because Nottingham City states that the colour describes the weather forecast and does not necessarily indicate whether gritting is required.
+3. **Nottinghamshire County Council @NottsCC on X — confirmed when current**
+   - Kept as a fallback/context source.
+   - Useful when the County posts an explicit same-night treatment decision.
+   - Broad wording about cold conditions continuing over several days is not carried forward as a nightly gritting decision.
 
-A stronger source always wins over a weaker one.
+A current higher-priority source wins over a lower-priority one.
 
 ## X feed implementation
 
@@ -51,13 +51,14 @@ The binary sensor and status sensor expose:
 ## Entities
 
 - `binary_sensor.gritting_overnight`
-  - **On** — confirmed County gritting, or positive Nottingham City proxy when no County decision is available.
-  - **Off** — only when a current County source explicitly says treatment is not planned.
-  - **Unavailable** — no current usable decision.
+  - **On** — current County gritting decision, or City daily proxy says gritting is required.
+  - **Off** — current County decision says no treatment, or City daily proxy says no gritting is required.
+  - **Unavailable** — no current usable nightly decision.
 - `sensor.gritting_status`
   - `Planned`
   - `Not planned`
-  - `Likely — Nottingham City proxy`
+  - `Likely — City says grit`
+  - `Likely not — City says no grit`
   - `Awaiting decision`
   - `Decision unclear`
 - `sensor.minimum_road_temperature`
@@ -101,23 +102,26 @@ A decision received today remains current until **09:00 the following morning**.
 
 ## Source behaviour
 
-### County X or County email
+### Nottinghamshire County email
 
-An explicit positive or negative operational decision is authoritative.
+A current explicit County decision is authoritative and takes priority over the proxy sources.
 
-Examples the parser recognises include:
-- “Gritters will be out ...”
-- “Our gritters are heading out ...”
-- “We'll be gritting ...”
-- “Gritting/treatment is planned ...”
-- “Routes will be treated ...”
-- “No gritting/treatment is planned ...”
-- “We won't be gritting ...”
-- “No action required ...”
+### Nottingham City Daily Gritting Update
 
-### Nottingham City email
+The City bulletin is designed as a daily operational update and includes a **Today's Gritting Action** field. The parser recognises both positive and negative action wording, including:
 
-Only a **positive** City treatment decision is used as a proxy. It can make the binary sensor **On** with `confidence: inferred`, but it can never switch the County sensor **Off**.
+- “Gritting Required”
+- “No Gritting Required”
+- “Gritting Tonight”
+- “No Gritting Tonight”
+
+The GREEN / AMBER / RED headline is retained only as context; it does not itself switch the binary sensor.
+
+Because Nottingham City is a separate highway authority, its decision is still labelled `confidence: inferred` when used as a proxy for Nottinghamshire County.
+
+### County X
+
+@NottsCC remains useful when it publishes a specific same-night decision such as “Gritters will be out from 7.30pm”. A previous night's post, or general wording that cold conditions will continue through the weekend, does not automatically make subsequent nights ON.
 
 ## Logging
 
@@ -130,6 +134,14 @@ logger:
 ```
 
 ## Version history
+
+### 0.2.4
+
+- Reordered source priority to County email → Nottingham City Daily Gritting Update → County X.
+- Nottingham City daily **Gritting Required / No Gritting Required** decisions can now set the proxy binary sensor either ON or OFF.
+- Added explicit parsing for the City's **Today's Gritting Action** field and **Gritting Tonight / No Gritting Tonight** wording.
+- Kept City GREEN / AMBER / RED as weather context only; the colour does not itself determine the gritting state.
+- Demoted broad County X posts to fallback/context so multi-day cold-weather wording does not obscure the more useful daily City decision.
 
 ### 0.2.3
 
