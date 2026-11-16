@@ -25,7 +25,7 @@ X does not provide a practical keyless profile API for this use. Version 0.2.0/0
 
 From **0.2.2**, the integration instead uses the documented public FxTwitter/FxEmbed v2 profile-timeline API:
 
-`https://api.fxtwitter.com/2/profile/NottsCC/statuses?count=20`
+`https://api.fxtwitter.com/2/profile/NottsCC/statuses?count=100`
 
 FxTwitter is a **third-party bridge to public X data**; it is not operated by Nottinghamshire County Council or X. It requires no account, developer key or API token. Its published v2 rate limit is 1000 requests/minute per IP, while this integration makes only one request every 30 minutes.
 
@@ -40,6 +40,13 @@ The binary sensor and status sensor expose:
 - `x_last_check`
 - `x_last_success`
 - `x_last_error`
+- `x_latest_post_time`
+- `x_latest_post_text`
+- `x_latest_post_url`
+- `x_latest_gritting_post_time`
+- `x_latest_gritting_post_text`
+- `x_latest_gritting_post_url`
+- `x_latest_gritting_post_planned`
 
 ## Entities
 
@@ -123,6 +130,13 @@ logger:
 ```
 
 ## Version history
+
+### 0.2.3
+
+- Increased the @NottsCC timeline depth from 20 to 100 posts so a gritting update is less likely to scroll out of the first page before the overnight decision expires.
+- Added diagnostics showing the newest @NottsCC post and the newest gritting-related @NottsCC post, including its text, timestamp, URL and whether the parser considered it an explicit gritting decision.
+- Retains the rule that retrospective wording such as “gritters have been out” is not treated as a plan for the coming night.
+- Nottingham City Amber/Green/Red weather colour alone does not switch the gritting binary sensor because the City winter-service plan states that the colour is not itself an indication that treatment is required.
 
 ### 0.2.2
 
