@@ -51,7 +51,7 @@ class GrittingData:
 
 
 class GrittingManager:
-    """Combine County X, County email and City proxy decisions."""
+    """Combine County email, City daily proxy and County X decisions."""
 
     def __init__(self, hass: HomeAssistant) -> None:
         self.hass = hass
@@ -116,15 +116,10 @@ class GrittingManager:
         decision_dt = self._event_datetime(payload.get("date"))
         parsed = parse_message(subject, body, decision_dt)
 
-        # Nottingham City is only a positive proxy. Different parts of the
-        # county can be colder than the city, so a City "no grit" decision must
-        # never turn the County sensor off.
-        if source == SOURCE_CITY_EMAIL and parsed.planned is not True:
-            _LOGGER.debug(
-                "Ignoring Nottingham City winter-service email as a County "
-                "fallback because it does not positively announce gritting"
-            )
-            return
+        # Nottingham City's daily bulletin is an explicit operational
+        # decision ("Gritting Required" / "No Gritting Required"). It is still
+        # a proxy for the wider county, so keep confidence="inferred", but use
+        # either outcome when no current County email decision exists.
 
         data = GrittingData(
             planned=parsed.planned,
@@ -318,12 +313,10 @@ class GrittingManager:
 
     @property
     def data(self) -> GrittingData:
-        """Return the highest-priority current decision."""
+        """Return County email, then City daily proxy, then County X."""
         for source in SOURCE_PRIORITY:
             candidate = self._decisions.get(source)
             if candidate is None or not self._is_current_decision(candidate):
-                continue
-            if source == SOURCE_CITY_EMAIL and candidate.planned is not True:
                 continue
             return candidate
         return GrittingData()
@@ -350,7 +343,11 @@ class GrittingManager:
         if not data.recognised or data.planned is None:
             return "Decision unclear"
         if data.source == SOURCE_CITY_EMAIL:
-            return "Likely — Nottingham City proxy"
+            return (
+                "Likely — City says grit"
+                if data.planned
+                else "Likely not — City says no grit"
+            )
         return "Planned" if data.planned else "Not planned"
 
     @property
