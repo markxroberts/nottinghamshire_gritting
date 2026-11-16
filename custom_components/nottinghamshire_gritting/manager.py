@@ -7,7 +7,13 @@ from datetime import datetime, timedelta
 import logging
 from typing import Any
 
+from aioimaplib import AioImapException
+
+from homeassistant.components.imap.coordinator import ImapMessage
+from homeassistant.components.imap.services import async_get_imap_client
+from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import Event, HomeAssistant
+from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
@@ -95,6 +101,145 @@ class GrittingManager:
             _LOGGER.warning(
                 "Ignoring incompatible stored Nottinghamshire gritting data"
             )
+
+    async def async_recover_imap_decisions(self) -> None:
+        """Recover current County/City decisions already present in IMAP.
+
+        The normal path is the imap_content event. After an integration reload
+        or Home Assistant restart, however, the current bulletin may already be
+        in the mailbox and therefore will not generate a new initial event.
+        Search a short recent window and restore the newest recognised message
+        from each authority.
+        """
+        since = (dt_util.now() - timedelta(days=2)).strftime("%d-%b-%Y")
+        recovered_sources: set[str] = set()
+        changed = False
+
+        for entry in self.hass.config_entries.async_entries("imap"):
+            if entry.state is not ConfigEntryState.LOADED:
+                continue
+
+            try:
+                async with async_get_imap_client(
+                    self.hass, entry.entry_id
+                ) as client:
+                    result, lines = await client.search(
+                        "SINCE", since, charset=None
+                    )
+                    if result != "OK" or not lines:
+                        continue
+
+                    message_ids = lines[0].split()
+                    if not message_ids:
+                        continue
+
+                    # Work newest first and cap the recovery scan so a broad
+                    # mailbox search cannot make startup excessively expensive.
+                    for raw_id in reversed(message_ids[-60:]):
+                        message_id = (
+                            raw_id.decode("ascii", errors="ignore")
+                            if isinstance(raw_id, bytes)
+                            else str(raw_id)
+                        )
+                        if not message_id:
+                            continue
+
+                        response = await client.fetch(
+                            message_id, "BODY.PEEK[]"
+                        )
+                        if (
+                            response.result != "OK"
+                            or len(response.lines) < 2
+                        ):
+                            continue
+
+                        message = ImapMessage(response.lines[1])
+                        source = classify_email_source(
+                            message.subject,
+                            message.text,
+                            message.sender,
+                        )
+                        if (
+                            source is None
+                            or source in recovered_sources
+                        ):
+                            continue
+
+                        decision_dt = self._event_datetime(message.date)
+                        if not self._is_datetime_current(decision_dt):
+                            continue
+
+                        parsed = parse_message(
+                            message.subject,
+                            message.text,
+                            decision_dt,
+                        )
+                        if parsed.planned is None:
+                            continue
+
+                        existing = self._decisions.get(source)
+                        existing_dt = (
+                            self._parse_datetime(existing.decision_time)
+                            if existing is not None
+                            else None
+                        )
+                        if (
+                            existing_dt is not None
+                            and existing_dt >= decision_dt
+                        ):
+                            recovered_sources.add(source)
+                            continue
+
+                        self._decisions[source] = GrittingData(
+                            planned=parsed.planned,
+                            decision_time=decision_dt.isoformat(),
+                            subject=message.subject or None,
+                            sender=message.sender or None,
+                            uid=message_id,
+                            minimum_road_temperature=(
+                                parsed.minimum_road_temperature
+                            ),
+                            treatment_time=(
+                                parsed.treatment_time.isoformat()
+                                if parsed.treatment_time
+                                else None
+                            ),
+                            excerpt=parsed.excerpt,
+                            recognised=True,
+                            source=source,
+                            confidence=(
+                                "inferred"
+                                if source == SOURCE_CITY_EMAIL
+                                else "confirmed"
+                            ),
+                        )
+                        recovered_sources.add(source)
+                        changed = True
+
+                        if {
+                            SOURCE_COUNTY_EMAIL,
+                            SOURCE_CITY_EMAIL,
+                        }.issubset(recovered_sources):
+                            break
+
+            except (
+                AioImapException,
+                OSError,
+                ServiceValidationError,
+                TimeoutError,
+            ) as err:
+                _LOGGER.debug(
+                    "Unable to recover gritting decisions from IMAP entry %s: %s",
+                    entry.title,
+                    err,
+                )
+
+        if changed:
+            await self._async_save()
+            _LOGGER.info(
+                "Recovered current gritting decision from existing IMAP mail"
+            )
+            async_dispatcher_send(self.hass, SIGNAL_UPDATE)
 
     async def async_handle_imap_event(self, event: Event) -> None:
         """Handle an imap_content event from County or City."""
