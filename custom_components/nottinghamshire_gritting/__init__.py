@@ -49,7 +49,15 @@ async def async_setup_entry(
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
-    # Do not hold up Home Assistant startup if X is slow or rate-limited.
+    # Recover a bulletin that arrived before this integration was reloaded.
+    # Do this in the background so IMAP/network latency cannot delay HA startup.
+    entry.async_create_background_task(
+        hass,
+        manager.async_recover_imap_decisions(),
+        "nottinghamshire_gritting_imap_recovery",
+    )
+
+    # X is tertiary context/fallback; do not hold up startup if it is slow.
     entry.async_create_background_task(
         hass,
         manager.async_refresh_x(),
