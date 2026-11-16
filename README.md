@@ -86,15 +86,15 @@ Official information:
 
 Copy `custom_components/nottinghamshire_gritting` into `/config/custom_components/`, then follow step 4 above.
 
-### Optional email fallbacks
+### Email decision sources
 
-For County and Nottingham City email fallback support:
+For County and Nottingham City email support:
 
 1. Configure Home Assistant's **IMAP** integration for the mailbox receiving the winter-service bulletins.
 2. In the IMAP options, enable **message text**, so `imap_content` events contain the email body.
 3. Subscribe to the relevant official winter-service bulletins.
 
-The integration works without IMAP if the @NottsCC X source is available.
+New messages are processed immediately from `imap_content` events. From 0.2.5, the integration also performs a short **startup recovery scan** of the last two days of mail using Home Assistant's existing IMAP connection settings. This means a current City/County bulletin that arrived before a Home Assistant restart or integration reload is recovered rather than being lost until the next email arrives. The recovery runs in the background and scans only the newest 60 messages in the recent window.
 
 ## Decision expiry
 
@@ -134,6 +134,13 @@ logger:
 ```
 
 ## Version history
+
+### 0.2.5
+
+- Added startup/reload IMAP recovery for current Nottingham City and Nottinghamshire County gritting bulletins already present in the mailbox.
+- Searches only the last two days and the newest 60 messages, then reuses the existing City/County parser and source priority.
+- Uses Home Assistant's configured IMAP connection without storing or exposing separate mailbox credentials.
+- Keeps the normal `imap_content` event path for new bulletins.
 
 ### 0.2.4
 
