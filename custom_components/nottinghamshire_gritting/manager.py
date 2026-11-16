@@ -64,6 +64,13 @@ class GrittingManager:
         self.x_last_check: str | None = None
         self.x_last_success: str | None = None
         self.x_last_error: str | None = None
+        self.x_latest_post_time: str | None = None
+        self.x_latest_post_text: str | None = None
+        self.x_latest_post_url: str | None = None
+        self.x_latest_gritting_post_time: str | None = None
+        self.x_latest_gritting_post_text: str | None = None
+        self.x_latest_gritting_post_url: str | None = None
+        self.x_latest_gritting_post_planned: bool | None = None
 
     async def async_load(self) -> None:
         """Load stored decisions, including migration from the v0.1 flat format."""
@@ -178,14 +185,35 @@ class GrittingManager:
         self.x_last_success = now.isoformat()
         self.x_last_error = None
 
+        self.x_latest_post_time = None
+        self.x_latest_post_text = None
+        self.x_latest_post_url = None
+        self.x_latest_gritting_post_time = None
+        self.x_latest_gritting_post_text = None
+        self.x_latest_gritting_post_url = None
+        self.x_latest_gritting_post_planned = None
+
+        if posts:
+            latest = posts[0]
+            self.x_latest_post_time = latest.created_at.isoformat()
+            self.x_latest_post_text = latest.text[:500]
+            self.x_latest_post_url = latest.url
+
         selected: GrittingData | None = None
         for post in posts:
-            if not self._is_datetime_current(post.created_at):
-                continue
             if not is_gritting_update_text(post.text):
                 continue
 
             parsed = parse_message(None, post.text, post.created_at)
+
+            if self.x_latest_gritting_post_time is None:
+                self.x_latest_gritting_post_time = post.created_at.isoformat()
+                self.x_latest_gritting_post_text = post.text[:500]
+                self.x_latest_gritting_post_url = post.url
+                self.x_latest_gritting_post_planned = parsed.planned
+
+            if not self._is_datetime_current(post.created_at):
+                continue
             if parsed.planned is None:
                 # The account often posts general winter/gritting information;
                 # only an explicit operational decision should be authoritative.
