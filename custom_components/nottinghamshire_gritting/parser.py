@@ -26,6 +26,12 @@ class ParsedDecision:
 
 NEGATIVE_PATTERNS = (
     re.compile(
+        r"\btoday'?s\s+gritting\s+action\s+(?:[:|\-]\s*)?"
+        r"(?:no\s+gritting(?:\s+tonight)?|no\s+gritting\s+required)\b",
+        re.I,
+    ),
+    re.compile(r"\bno\s+gritting\s+tonight\b", re.I),
+    re.compile(
         r"\bno\s+(?:precautionary\s+)?(?:gritting|treatment|salting)\s+"
         r"(?:is\s+)?(?:planned|required|scheduled)\b",
         re.I,
@@ -42,6 +48,12 @@ NEGATIVE_PATTERNS = (
 )
 
 POSITIVE_PATTERNS = (
+    re.compile(
+        r"\btoday'?s\s+gritting\s+action\s+(?:[:|\-]\s*)?"
+        r"gritting\s+required\b",
+        re.I,
+    ),
+    re.compile(r"\bgritting\s+tonight\b", re.I),
     re.compile(r"\bgritters?\s+(?:will\s+be|will\s+go|are\s+going)\s+out\b", re.I),
     re.compile(r"\bgritting\s+teams?\s+(?:will\s+be|are)\s+(?:\w+\s+){0,3}out\b", re.I),
     re.compile(
