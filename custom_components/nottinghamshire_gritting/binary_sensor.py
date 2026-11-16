@@ -59,4 +59,13 @@ class NottinghamshireGrittingOvernightBinarySensor(
             "x_last_check": self.manager.x_last_check,
             "x_last_success": self.manager.x_last_success,
             "x_last_error": self.manager.x_last_error,
+            "x_latest_post_time": self.manager.x_latest_post_time,
+            "x_latest_post_text": self.manager.x_latest_post_text,
+            "x_latest_post_url": self.manager.x_latest_post_url,
+            "x_latest_gritting_post_time": self.manager.x_latest_gritting_post_time,
+            "x_latest_gritting_post_text": self.manager.x_latest_gritting_post_text,
+            "x_latest_gritting_post_url": self.manager.x_latest_gritting_post_url,
+            "x_latest_gritting_post_planned": (
+                self.manager.x_latest_gritting_post_planned
+            ),
         }
