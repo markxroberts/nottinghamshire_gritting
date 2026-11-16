@@ -32,6 +32,6 @@ COUNCIL_EMAILME_URL = (
 )
 X_PROFILE_URL = "https://x.com/NottsCC"
 X_TIMELINE_URL = (
-    "https://api.fxtwitter.com/2/profile/NottsCC/statuses?count=20"
+    "https://api.fxtwitter.com/2/profile/NottsCC/statuses?count=100"
 )
 X_POLL_MINUTES = 30
