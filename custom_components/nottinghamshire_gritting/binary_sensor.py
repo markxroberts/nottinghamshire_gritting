@@ -31,12 +31,8 @@ class NottinghamshireGrittingOvernightBinarySensor(
     _attr_translation_key = "gritting_overnight"
 
     @property
-    def available(self) -> bool:
-        return self.manager.is_current and self.manager.data.recognised
-
-    @property
     def is_on(self) -> bool | None:
-        if not self.available:
+        if not self.manager.is_current or not self.manager.data.recognised:
             return None
         return self.manager.data.planned
 

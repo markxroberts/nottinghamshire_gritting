@@ -89,13 +89,6 @@ class MinimumRoadTemperatureSensor(NottinghamshireGrittingEntity, SensorEntity):
     _attr_unique_id = "nottinghamshire_gritting_minimum_road_temperature"
 
     @property
-    def available(self) -> bool:
-        return (
-            self.manager.is_current
-            and self.manager.data.minimum_road_temperature is not None
-        )
-
-    @property
     def native_value(self) -> float | None:
         return self.manager.data.minimum_road_temperature
 
@@ -110,13 +103,6 @@ class TreatmentTimeSensor(NottinghamshireGrittingEntity, SensorEntity):
         device_class=SensorDeviceClass.TIMESTAMP,
     )
     _attr_unique_id = "nottinghamshire_gritting_treatment_time"
-
-    @property
-    def available(self) -> bool:
-        return (
-            self.manager.is_current
-            and self.manager.treatment_datetime is not None
-        )
 
     @property
     def native_value(self) -> datetime | None:
@@ -134,10 +120,6 @@ class LastDecisionSensor(NottinghamshireGrittingEntity, SensorEntity):
         entity_category=EntityCategory.DIAGNOSTIC,
     )
     _attr_unique_id = "nottinghamshire_gritting_last_decision"
-
-    @property
-    def available(self) -> bool:
-        return self.manager.decision_datetime is not None
 
     @property
     def native_value(self) -> datetime | None:

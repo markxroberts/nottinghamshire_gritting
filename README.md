@@ -53,7 +53,7 @@ The binary sensor and status sensor expose:
 - `binary_sensor.gritting_overnight`
   - **On** — current County gritting decision, or City daily proxy says gritting is required.
   - **Off** — current County decision says no treatment, or City daily proxy says no gritting is required.
-  - **Unavailable** — no current usable nightly decision.
+  - **Unknown** — no current recognised nightly decision (including after 09:00 expiry); the entity remains available. This does not mean “Not planned”.
 - `sensor.gritting_status`
   - `Planned`
   - `Not planned`
@@ -64,6 +64,8 @@ The binary sensor and status sensor expose:
 - `sensor.minimum_road_temperature`
 - `sensor.treatment_time`
 - `sensor.last_decision` — timestamp of the effective current decision.
+
+All five entities remain available while awaiting a decision. Temperature, treatment time and last decision report **unknown** when no current value exists, including when a current bulletin omits a field. Source and X diagnostics remain accessible as attributes of the status and binary sensors; source fields are empty without a current decision, while X diagnostics retain their independently tracked values. A best-effort X fetch failure is reported by `x_feed_available` and `x_last_error` and does not make working email-based entities unavailable. Missing or expired decisions are not integration failures.
 
 ## Why use the County X feed?
 
@@ -98,7 +100,7 @@ New messages are processed immediately from `imap_content` events. From 0.2.5, t
 
 ## Decision expiry
 
-A decision received today remains current until **09:00 the following morning**. A decision from yesterday therefore remains valid after midnight, but is expired at 09:00 rather than being incorrectly shown as tonight's decision during the following day.
+A decision received at or after 09:00 remains current until **09:00 the following morning**. An early-morning update received before 09:00 belongs to the night just ending and expires at 09:00 that same morning. A decision from yesterday therefore remains valid after midnight, but is expired at 09:00 rather than being incorrectly shown as tonight's decision during the following day.
 
 ## Source behaviour
 
@@ -133,7 +135,19 @@ logger:
     custom_components.nottinghamshire_gritting: debug
 ```
 
+## Tests
+
+With Home Assistant, its IMAP dependency (`aioimaplib`), pytest and pytest-asyncio installed in a compatible Python environment, run `python -m pytest -q`.
+
 ## Version history
+
+### 0.2.6
+
+- Keep entities available between the unchanged 09:00 decision expiry and the next update.
+- Report `Awaiting decision` on the status sensor and unknown on the binary sensor when no current decision exists; an unrecognised decision also leaves the binary state unknown.
+- Report unknown instead of unavailable for missing current temperature, treatment time and decision time.
+- Preserve source/X diagnostic attributes, source priority and explicit planned/not-planned states.
+- Add regression tests for expiry, startup, unclear decisions, missing fields and X failure diagnostics.
 
 ### 0.2.5
 
